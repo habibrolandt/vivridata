@@ -1,0 +1,10 @@
+__pycache__
+*.db
+.env
+.git
+tests
+infra
+deploy
+monitoring
+backup
+caddy

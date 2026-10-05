@@ -1,0 +1,8 @@
+# Copier en terraform.tfvars et remplir
+subscription_id  = "00000000-0000-0000-0000-000000000000"     # az account show --query id -o tsv
+allowed_ssh_cidr = "102.x.x.x/32"                              # ton IP : curl ifconfig.me
+repo_url         = "https://github.com/TON_USER/vivridata.git"
+github_repo      = "TON_USER/vivridata"                        # "" pour ne pas activer le CI/CD
+# location       = "francecentral"
+# vm_size        = "Standard_B2s"
+# enable_https   = true

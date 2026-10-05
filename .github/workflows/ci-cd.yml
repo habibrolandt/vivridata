@@ -1,0 +1,56 @@
+name: CI/CD VivriData
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # nécessaire pour l'authentification OIDC auprès d'Azure (aucune clé stockée)
+
+jobs:
+  tests:
+    name: Tests et qualité
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  build:
+    name: Construction des images
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t vivridata-app:ci .
+      - run: docker build -t vivridata-backup:ci ./backup
+      - name: Vérification de la configuration Compose
+        run: cp .env.example .env && docker compose config --quiet
+
+  deploy:
+    name: Déploiement sur Azure
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authentification Azure (fédération d'identité OIDC, sans secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Mise à jour de la VM (Azure Run Command)
+        run: |
+          az vm run-command invoke \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AZURE_VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "git -C /opt/vivridata -c safe.directory=/opt/vivridata pull --ff-only && bash /opt/vivridata/deploy/update.sh" \
+            --query "value[0].message" -o tsv

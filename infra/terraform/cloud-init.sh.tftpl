@@ -1,0 +1,21 @@
+#!/bin/bash
+# Exécuté par cloud-init au premier démarrage de la VM.
+set -euo pipefail
+exec > >(tee -a /var/log/vivridata-bootstrap.log) 2>&1
+echo "=== Démarrage VivriData $(date -u) ==="
+
+APP_DIR=/opt/vivridata
+if [ ! -d "$APP_DIR/.git" ]; then
+  apt-get update -y
+  apt-get install -y git
+  git clone "${repo_url}" "$APP_DIR"
+fi
+
+export POSTGRES_PASSWORD="${db_password}"
+export API_KEY="${api_key}"
+export GRAFANA_ADMIN_PASSWORD="${grafana_password}"
+export SITE_ADDRESS="${site_address}"
+export AZ_STORAGE_ACCOUNT="${storage_account}"
+export ENVIRONMENT="production-azure"
+
+bash "$APP_DIR/deploy/bootstrap.sh"

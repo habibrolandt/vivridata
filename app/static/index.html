@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VivriData CI · Observatoire des prix vivriers</title>
+<script src="/static/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f3f5f4; --card:#fff; --ink:#15211c; --muted:#5d6b64; --brand:#1d6b45; --brand-2:#e07a1f; --line:#dfe5e2; --up:#b3261e; --down:#1d6b45; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:#10261b; color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:38px; height:38px; border-radius:9px; background:var(--brand-2); display:grid; place-items:center; font-weight:800; }
+  .brand h1 { margin:0; font-size:19px; }
+  .brand p { margin:2px 0 0; font-size:12px; color:#b9cbc1; }
+  #instance { font:12px ui-monospace,Menlo,monospace; background:#1d3a2b; padding:6px 10px; border-radius:6px; color:#d6eadf; }
+  main { max-width:1180px; margin:0 auto; padding:20px 16px 40px; display:grid; gap:16px; }
+  .notice { font-size:13px; color:#7a4a12; background:#fdf1e3; border:1px solid #f3d5b1; padding:8px 12px; border-radius:8px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .kpi .v { font-size:26px; font-weight:750; }
+  .kpi .l { font-size:12px; color:var(--muted); margin-top:2px; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  select, input, button { font:inherit; font-size:14px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; background:#fff; }
+  button, .btn { background:var(--brand); color:#fff; border:none; cursor:pointer; font-weight:600; text-decoration:none; padding:9px 14px; border-radius:7px; font-size:14px; }
+  .btn.ghost { background:#fff; color:var(--brand); border:1px solid var(--brand); }
+  .grid2 { display:grid; grid-template-columns:3fr 2fr; gap:16px; }
+  @media (max-width:860px){ .grid2 { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+  .card h2 { font-size:15px; margin:0 0 12px; }
+  .chart { position:relative; height:280px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .tag { font-size:11px; padding:2px 7px; border-radius:10px; background:#e7f1ec; color:var(--brand); }
+  .tag.sim { background:#f1f1f1; color:#666; }
+  form.saisie { display:grid; gap:8px; }
+  .msg { font-size:13px; min-height:18px; }
+  footer { text-align:center; font-size:12px; color:var(--muted); }
+  footer a { color:var(--brand); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">VD</div>
+    <div><h1>VivriData CI</h1><p>Observatoire des prix des produits vivriers · Côte d'Ivoire</p></div>
+  </div>
+  <div id="instance">connexion…</div>
+</header>
+
+<main>
+  <div class="notice">Démonstration : les historiques de prix sont <strong>simulés</strong>. Les nouveaux relevés saisis ci-dessous sont réels et stockés dans la base.</div>
+
+  <section class="kpis">
+    <div class="kpi"><div class="v" id="k-releves">–</div><div class="l">relevés enregistrés</div></div>
+    <div class="kpi"><div class="v" id="k-marches">–</div><div class="l">marchés suivis</div></div>
+    <div class="kpi"><div class="v" id="k-produits">–</div><div class="l">produits suivis</div></div>
+    <div class="kpi"><div class="v" id="k-var">–</div><div class="l" id="k-var-l">variation sur la période</div></div>
+  </section>
+
+  <div class="toolbar">
+    <label for="produit"><strong>Produit</strong></label>
+    <select id="produit"></select>
+    <a class="btn ghost" id="export" href="/api/export.csv">Exporter CSV</a>
+    <a class="btn ghost" href="/docs" target="_blank">API (Swagger)</a>
+  </div>
+
+  <section class="grid2">
+    <div class="card"><h2 id="t-evol">Évolution du prix moyen national</h2><div class="chart"><canvas id="c-evol"></canvas></div></div>
+    <div class="card"><h2 id="t-marche">Prix moyen par marché (14 derniers jours)</h2><div class="chart"><canvas id="c-marche"></canvas></div></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Derniers relevés</h2>
+      <table><thead><tr><th>Date</th><th>Produit</th><th>Marché</th><th style="text-align:right">Prix (FCFA)</th><th>Source</th></tr></thead><tbody id="releves"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Saisie d'un relevé (agent de collecte)</h2>
+      <form class="saisie" id="f">
+        <select name="produit_id" id="f-produit" required></select>
+        <select name="marche_id" id="f-marche" required></select>
+        <input name="prix" type="number" min="1" placeholder="Prix relevé (FCFA)" required>
+        <input name="key" type="password" placeholder="Clé API de l'agent" required>
+        <button>Enregistrer le relevé</button>
+        <div class="msg" id="msg"></div>
+      </form>
+    </div>
+  </section>
+
+  <footer>VivriData CI · déployé sur Microsoft Azure · <a href="/grafana/" target="_blank">Supervision (Grafana)</a></footer>
+</main>
+
+<script>
+const fmt = n => new Intl.NumberFormat('fr-FR').format(n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const get = u => fetch(u).then(r => r.json());
+let produits = [], chartEvol, chartMarche;
+
+async function loadInfo() {
+  try {
+    const i = await get('/api/info');
+    document.getElementById('instance').textContent = `v${i.version} · ${i.environment} · instance ${i.instance}`;
+  } catch (e) { document.getElementById('instance').textContent = 'instance indisponible'; }
+}
+
+async function loadResume() {
+  const r = await get('/api/stats/resume');
+  document.getElementById('k-releves').textContent = fmt(r.releves);
+  document.getElementById('k-marches').textContent = r.marches;
+  document.getElementById('k-produits').textContent = r.produits;
+}
+
+async function loadReleves() {
+  const rows = await get('/api/releves?limit=8');
+  document.getElementById('releves').innerHTML = rows.map(r => `
+    <tr><td>${esc(r.date_releve)}</td><td>${esc(r.produit)}</td><td>${esc(r.marche)}</td>
+    <td class="num">${fmt(r.prix)}</td><td><span class="tag ${r.source === 'simulation' ? 'sim' : ''}">${esc(r.source)}</span></td></tr>`).join('');
+}
+
+async function loadCharts() {
+  const id = document.getElementById('produit').value;
+  const p = produits.find(x => x.id == id);
+  document.getElementById('export').href = '/api/export.csv?produit_id=' + id;
+  const [evo, mar] = await Promise.all([get('/api/stats/evolution?produit_id=' + id), get('/api/stats/prix-par-marche?produit_id=' + id)]);
+
+  const v = evo.variation_pct;
+  const kv = document.getElementById('k-var');
+  kv.textContent = v === null ? '–' : (v > 0 ? '+' : '') + v.toString().replace('.', ',') + ' %';
+  kv.style.color = v > 0 ? 'var(--up)' : 'var(--down)';
+  document.getElementById('k-var-l').textContent = `variation du prix : ${p.nom.toLowerCase()}`;
+  document.getElementById('t-evol').textContent = `Évolution du prix moyen national · ${p.nom} (FCFA/${p.unite})`;
+  document.getElementById('t-marche').textContent = `Prix moyen par marché, 14 derniers jours (FCFA/${p.unite})`;
+
+  const evoData = { labels: evo.serie.map(s => new Date(s.semaine).toLocaleDateString('fr-FR', {day:'2-digit', month:'short'})),
+    datasets: [{ data: evo.serie.map(s => s.prix_moyen), borderColor: '#1d6b45', backgroundColor: '#1d6b45', tension: .3, pointRadius: 3 }] };
+  const marData = { labels: mar.marches.map(m => m.marche),
+    datasets: [{ data: mar.marches.map(m => m.prix_moyen), backgroundColor: '#e07a1f', borderRadius: 4 }] };
+  const base = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+    tooltip: { callbacks: { label: c => fmt(c.parsed.y ?? c.parsed.x) + ' FCFA' } } } };
+
+  if (chartEvol) { chartEvol.data = evoData; chartEvol.update(); }
+  else chartEvol = new Chart(document.getElementById('c-evol'), { type: 'line', data: evoData,
+    options: { ...base, scales: { y: { ticks: { callback: v => fmt(v) } } } } });
+  if (chartMarche) { chartMarche.data = marData; chartMarche.update(); }
+  else chartMarche = new Chart(document.getElementById('c-marche'), { type: 'bar', data: marData,
+    options: { ...base, indexAxis: 'y', scales: { x: { ticks: { callback: v => fmt(v) } } } } });
+}
+
+async function init() {
+  produits = await get('/api/produits');
+  const marches = await get('/api/marches');
+  const opts = arr => arr.map(x => `<option value="${x.id}">${esc(x.nom)}</option>`).join('');
+  document.getElementById('produit').innerHTML = opts(produits);
+  document.getElementById('f-produit').innerHTML = opts(produits);
+  document.getElementById('f-marche').innerHTML = opts(marches);
+  document.getElementById('produit').onchange = loadCharts;
+  await Promise.all([loadInfo(), loadResume(), loadReleves(), loadCharts()]);
+  setInterval(loadInfo, 3000);
+}
+
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target), msg = document.getElementById('msg');
+  const body = { produit_id: +f.get('produit_id'), marche_id: +f.get('marche_id'), prix: +f.get('prix'), source: 'agent' };
+  const r = await fetch('/api/releves', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': f.get('key') }, body: JSON.stringify(body) });
+  if (r.ok) {
+    msg.style.color = 'var(--brand)'; msg.textContent = 'Relevé enregistré.';
+    e.target.prix.value = '';
+    loadResume(); loadReleves(); loadCharts();
+  } else {
+    msg.style.color = 'var(--up)'; msg.textContent = r.status === 401 ? 'Clé API refusée.' : 'Erreur : vérifie les champs.';
+  }
+};
+
+init();
+</script>
+</body>
+</html>

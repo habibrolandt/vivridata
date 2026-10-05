@@ -1,0 +1,41 @@
+# SITE_ADDRESS=":80"            -> HTTP simple
+# SITE_ADDRESS="1-2-3-4.sslip.io" -> certificat Let's Encrypt automatique + redirection HTTP -> HTTPS
+{
+	admin off
+}
+
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Les métriques internes ne sont pas exposées sur Internet
+	handle /metrics* {
+		respond "Not found" 404
+	}
+
+	handle /grafana* {
+		reverse_proxy grafana:3000
+	}
+
+	# Répartition de charge entre toutes les répliques "app" (découvertes par DNS toutes les 5 s)
+	handle {
+		reverse_proxy {
+			dynamic a {
+				name app
+				port 8000
+				refresh 5s
+			}
+			lb_policy round_robin
+			lb_retries 2
+			fail_duration 10s
+		}
+	}
+
+	log
+}
